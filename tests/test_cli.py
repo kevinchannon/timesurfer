@@ -154,3 +154,44 @@ class TestSwitchToCommand:
 
         assert result.exit_code == 0
         assert "Already working on 'coding'" in result.output
+
+
+class TestUntrackedTime:
+    def test_stop_shows_untracked_time(self, temp_data_file):
+        """Stop should show untracked time between start and first task."""
+        with patch("time_surfer.cli.Storage") as MockStorage:
+            MockStorage.return_value = Storage(temp_data_file)
+            with patch("time_surfer.tracker.datetime") as mock_dt:
+                # Start at 9:00
+                mock_dt.now.return_value = datetime(2026, 1, 30, 9, 0, 0)
+                runner.invoke(app, ["start"])
+                # Switch to coding at 9:30 (30 min untracked)
+                mock_dt.now.return_value = datetime(2026, 1, 30, 9, 30, 0)
+                runner.invoke(app, ["switch-to", "coding"])
+                # Stop at 10:30 (1 hour coding)
+                mock_dt.now.return_value = datetime(2026, 1, 30, 10, 30, 0)
+                result = runner.invoke(app, ["stop"])
+
+        assert result.exit_code == 0
+        assert "untracked" in result.output
+        assert "0:30:00" in result.output  # 30 min untracked
+
+    def test_report_shows_untracked_time(self, temp_data_file):
+        """Report should show untracked time for active day."""
+        with patch("time_surfer.cli.Storage") as MockStorage:
+            MockStorage.return_value = Storage(temp_data_file)
+            with patch("time_surfer.tracker.datetime") as mock_dt:
+                with patch("time_surfer.cli.datetime") as mock_cli_dt:
+                    # Start at 9:00
+                    mock_dt.now.return_value = datetime(2026, 1, 30, 9, 0, 0)
+                    runner.invoke(app, ["start"])
+                    # Switch to coding at 9:30 (30 min untracked)
+                    mock_dt.now.return_value = datetime(2026, 1, 30, 9, 30, 0)
+                    runner.invoke(app, ["switch-to", "coding"])
+                    # Report at 10:30 (1 hour coding, 30 min untracked)
+                    mock_dt.now.return_value = datetime(2026, 1, 30, 10, 30, 0)
+                    mock_cli_dt.now.return_value = datetime(2026, 1, 30, 10, 30, 0)
+                    result = runner.invoke(app, ["report"])
+
+        assert result.exit_code == 0
+        assert "untracked" in result.output

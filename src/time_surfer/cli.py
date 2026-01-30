@@ -1,5 +1,7 @@
 """CLI commands for time-surfer."""
 
+from datetime import datetime
+
 import typer
 from rich.console import Console
 
@@ -42,6 +44,7 @@ def stop():
     console.print(f"[green]{result.message}[/green]")
 
     # Calculate total time tracked
+    total_seconds = None
     if result.day and result.day.start_time and result.day.end_time:
         total_seconds = (result.day.end_time - result.day.start_time).total_seconds()
         console.print(f"Total time tracked: {format_duration(total_seconds)}")
@@ -50,7 +53,7 @@ def stop():
         console.print("No tasks recorded. Use 'switch-to' to track tasks.")
         return
 
-    table = create_task_table(result.task_totals)
+    table = create_task_table(result.task_totals, total_duration=total_seconds)
     console.print(table)
 
 
@@ -81,7 +84,13 @@ def report():
         console.print("No tasks recorded. Use 'switch-to' to track tasks.")
         return
 
-    table = create_task_table(result.task_totals)
+    # Calculate total duration (active day uses now, stopped day uses end_time)
+    total_seconds = None
+    if result.day and result.day.start_time:
+        end = result.day.end_time or datetime.now()
+        total_seconds = (end - result.day.start_time).total_seconds()
+
+    table = create_task_table(result.task_totals, total_duration=total_seconds)
     console.print(table)
 
 

@@ -74,3 +74,94 @@ class TestCreateTaskTable:
 
         # Verify table was created (percentages are in rendered output)
         assert table is not None
+
+    def test_create_task_table_shows_untracked_time(self):
+        """Untracked time should appear when total_duration exceeds task sum."""
+        # 1 hour of coding, but 1.5 hours total duration = 30 min untracked
+        task_totals = {"coding": 3600.0}
+        total_duration = 5400.0  # 1.5 hours
+        table = create_task_table(task_totals, total_duration=total_duration)
+
+        rows = list(table.rows)
+        # Should have: coding, untracked, Total (3 rows)
+        assert len(rows) == 3
+
+        # Render table to check content
+        from io import StringIO
+        from rich.console import Console
+
+        console = Console(file=StringIO(), force_terminal=True)
+        console.print(table)
+        output = console.file.getvalue()
+
+        assert "untracked" in output
+        assert "0:30:00" in output  # 30 min untracked
+
+    def test_create_task_table_no_untracked_when_fully_allocated(self):
+        """No untracked row when tasks exactly fill total duration."""
+        task_totals = {"coding": 3600.0, "meetings": 1800.0}
+        total_duration = 5400.0  # Exactly matches sum
+        table = create_task_table(task_totals, total_duration=total_duration)
+
+        rows = list(table.rows)
+        # Should have: coding, meetings, Total (3 rows, no untracked)
+        assert len(rows) == 3
+
+        from io import StringIO
+        from rich.console import Console
+
+        console = Console(file=StringIO(), force_terminal=True)
+        console.print(table)
+        output = console.file.getvalue()
+
+        assert "untracked" not in output
+
+    def test_create_task_table_untracked_below_threshold_not_shown(self):
+        """Untracked time < 0.5 seconds should not be shown (rounding errors)."""
+        task_totals = {"coding": 3600.0}
+        # 0.4 seconds untracked - below threshold
+        total_duration = 3600.4
+        table = create_task_table(task_totals, total_duration=total_duration)
+
+        from io import StringIO
+        from rich.console import Console
+
+        console = Console(file=StringIO(), force_terminal=True)
+        console.print(table)
+        output = console.file.getvalue()
+
+        assert "untracked" not in output
+
+    def test_create_task_table_percentages_based_on_total_duration(self):
+        """Percentages should be based on total_duration, not sum of tasks."""
+        # 1 hour coding out of 2 hours total = 50%
+        task_totals = {"coding": 3600.0}
+        total_duration = 7200.0  # 2 hours
+        table = create_task_table(task_totals, total_duration=total_duration)
+
+        from io import StringIO
+        from rich.console import Console
+
+        console = Console(file=StringIO(), force_terminal=True)
+        console.print(table)
+        output = console.file.getvalue()
+
+        # coding should be 50%, untracked should be 50%
+        assert "50.0%" in output
+
+    def test_create_task_table_backward_compatible_without_total_duration(self):
+        """Without total_duration parameter, behavior unchanged."""
+        task_totals = {"coding": 3600.0, "meetings": 1800.0}
+        table = create_task_table(task_totals)
+
+        from io import StringIO
+        from rich.console import Console
+
+        console = Console(file=StringIO(), force_terminal=True)
+        console.print(table)
+        output = console.file.getvalue()
+
+        # No untracked row when total_duration not provided
+        assert "untracked" not in output
+        # Percentages still work (coding is 66.7%, meetings is 33.3%)
+        assert "66.7%" in output
