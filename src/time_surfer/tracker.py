@@ -49,31 +49,13 @@ class Tracker:
         self.storage.save_day(day)
 
         time_str = now.strftime("%H:%M")
-        total_time = day.end_time - day.start_time
-        total_hours = int(total_time.total_seconds() // 3600)
-        total_minutes = int((total_time.total_seconds() % 3600) // 60)
-        total_seconds = int(total_time.total_seconds() % 60)
-        total_str = f"{total_hours}:{total_minutes:02d}:{total_seconds:02d}"
-
-        message = f"Stopped tracking at {time_str}\n\n"
-        message += "Daily Summary\n"
-        message += f"Total time tracked: {total_str}\n"
-
-        if not day.spans:
-            message += "No tasks recorded. Use 'switch-to' to track tasks."
-        else:
-            message += "\nTime per task:\n"
-            task_totals = self._aggregate_task_times(day.spans)
-            for task, seconds in task_totals.items():
-                hours = int(seconds // 3600)
-                mins = int((seconds % 3600) // 60)
-                secs = int(seconds % 60)
-                message += f"  {task}: {hours}:{mins:02d}:{secs:02d}\n"
+        task_totals = self._aggregate_task_times(day.spans) if day.spans else {}
 
         return TrackerResult(
             success=True,
-            message=message,
+            message=f"Stopped tracking at {time_str}",
             day=day,
+            task_totals=task_totals,
         )
 
     def _aggregate_task_times(self, spans: list) -> dict[str, float]:
@@ -98,6 +80,43 @@ class Tracker:
         if day and day.is_active:
             return day
         return None
+
+    def get_report_data(self) -> TrackerResult:
+        """Get report data for the current day.
+
+        Returns aggregated task times including any open span up to now.
+        Works for both active and stopped days.
+        """
+        now = datetime.now()
+        date_str = now.strftime("%Y-%m-%d")
+
+        day = self.storage.load_day(date_str)
+        if not day or day.start_time is None:
+            return TrackerResult(success=False, message="Day not started")
+
+        # Calculate task totals, including open span if any
+        task_totals = self._aggregate_task_times_with_open(day.spans, now)
+
+        return TrackerResult(
+            success=True,
+            message="Report data retrieved",
+            day=day,
+            task_totals=task_totals,
+        )
+
+    def _aggregate_task_times_with_open(
+        self, spans: list, now: datetime
+    ) -> dict[str, float]:
+        """Aggregate total seconds per task from spans, including open spans."""
+        totals: dict[str, float] = {}
+        for span in spans:
+            end_time = span.end if span.end is not None else now
+            duration = (end_time - span.start).total_seconds()
+            if span.task in totals:
+                totals[span.task] += duration
+            else:
+                totals[span.task] = duration
+        return totals
 
     def switch_to(self, task: str) -> TrackerResult:
         """Switch to a new task, implicitly starting the day if needed."""

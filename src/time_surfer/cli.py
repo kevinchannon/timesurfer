@@ -3,6 +3,7 @@
 import typer
 from rich.console import Console
 
+from time_surfer.formatting import create_task_table, format_duration
 from time_surfer.storage import Storage
 from time_surfer.tracker import Tracker
 
@@ -34,11 +35,23 @@ def stop():
     tracker = get_tracker()
     result = tracker.stop()
 
-    if result.success:
-        console.print(f"[green]{result.message}[/green]")
-    else:
+    if not result.success:
         console.print(f"[red]Error: {result.message}[/red]")
         raise typer.Exit(code=1)
+
+    console.print(f"[green]{result.message}[/green]")
+
+    # Calculate total time tracked
+    if result.day and result.day.start_time and result.day.end_time:
+        total_seconds = (result.day.end_time - result.day.start_time).total_seconds()
+        console.print(f"Total time tracked: {format_duration(total_seconds)}")
+
+    if not result.task_totals:
+        console.print("No tasks recorded. Use 'switch-to' to track tasks.")
+        return
+
+    table = create_task_table(result.task_totals)
+    console.print(table)
 
 
 @app.command("switch-to")
@@ -52,6 +65,24 @@ def switch_to(task: str = typer.Argument(..., help="Name of the task to switch t
     else:
         console.print(f"[red]Error: {result.message}[/red]")
         raise typer.Exit(code=1)
+
+
+@app.command()
+def report():
+    """Show time report for the current day."""
+    tracker = get_tracker()
+    result = tracker.get_report_data()
+
+    if not result.success:
+        console.print(f"[red]Error: {result.message}[/red]")
+        raise typer.Exit(code=1)
+
+    if not result.task_totals:
+        console.print("No tasks recorded. Use 'switch-to' to track tasks.")
+        return
+
+    table = create_task_table(result.task_totals)
+    console.print(table)
 
 
 if __name__ == "__main__":

@@ -106,7 +106,21 @@ class TestTrackerStop:
         loaded = storage.load_day("2026-01-30")
         assert loaded.end_time == datetime(2026, 1, 30, 17, 0, 0)
 
-    def test_stop_message_includes_total_time(self, temp_data_file):
+    def test_stop_returns_task_totals(self, temp_data_file):
+        storage = Storage(temp_data_file)
+        tracker = Tracker(storage)
+
+        with patch("time_surfer.tracker.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 1, 30, 9, 0, 0)
+            tracker.switch_to("coding")
+            mock_dt.now.return_value = datetime(2026, 1, 30, 10, 0, 0)
+            result = tracker.stop()
+
+        assert result.task_totals is not None
+        assert "coding" in result.task_totals
+        assert result.task_totals["coding"] == 3600.0  # 1 hour
+
+    def test_stop_with_no_spans_returns_empty_task_totals(self, temp_data_file):
         storage = Storage(temp_data_file)
         tracker = Tracker(storage)
 
@@ -116,21 +130,9 @@ class TestTrackerStop:
             mock_dt.now.return_value = datetime(2026, 1, 30, 17, 0, 0)
             result = tracker.stop()
 
-        assert "8:00:00" in result.message
+        assert result.task_totals == {}
 
-    def test_stop_with_no_spans_shows_helpful_message(self, temp_data_file):
-        storage = Storage(temp_data_file)
-        tracker = Tracker(storage)
-
-        with patch("time_surfer.tracker.datetime") as mock_dt:
-            mock_dt.now.return_value = datetime(2026, 1, 30, 9, 0, 0)
-            tracker.start()
-            mock_dt.now.return_value = datetime(2026, 1, 30, 17, 0, 0)
-            result = tracker.stop()
-
-        assert "No tasks recorded" in result.message
-
-    def test_stop_shows_time_per_task(self, temp_data_file):
+    def test_stop_returns_multiple_task_totals(self, temp_data_file):
         storage = Storage(temp_data_file)
         tracker = Tracker(storage)
 
@@ -144,10 +146,8 @@ class TestTrackerStop:
             mock_dt.now.return_value = datetime(2026, 1, 30, 12, 0, 0)
             result = tracker.stop()
 
-        assert "coding" in result.message
-        assert "2:00:00" in result.message  # 2 hours of coding
-        assert "meetings" in result.message
-        assert "0:30:00" in result.message  # 30 min of meetings
+        assert result.task_totals["coding"] == 7200.0  # 2 hours
+        assert result.task_totals["meetings"] == 1800.0  # 30 min
 
     def test_stop_aggregates_multiple_spans_same_task(self, temp_data_file):
         storage = Storage(temp_data_file)
@@ -164,10 +164,8 @@ class TestTrackerStop:
             result = tracker.stop()
 
         # coding: 1hr + 1hr = 2hrs, meetings: 30min
-        assert "coding" in result.message
-        assert "2:00:00" in result.message
-        assert "meetings" in result.message
-        assert "0:30:00" in result.message
+        assert result.task_totals["coding"] == 7200.0
+        assert result.task_totals["meetings"] == 1800.0
 
     def test_stop_closes_open_span(self, temp_data_file):
         storage = Storage(temp_data_file)
@@ -215,6 +213,62 @@ class TestTrackerGetCurrentDay:
             day = tracker.get_current_day()
 
         assert day is None
+
+
+class TestTrackerGetReportData:
+    def test_get_report_data_returns_aggregated_times(self, temp_data_file):
+        storage = Storage(temp_data_file)
+        tracker = Tracker(storage)
+
+        with patch("time_surfer.tracker.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 1, 30, 9, 0, 0)
+            tracker.switch_to("coding")
+            mock_dt.now.return_value = datetime(2026, 1, 30, 10, 0, 0)
+            tracker.switch_to("meetings")
+            mock_dt.now.return_value = datetime(2026, 1, 30, 10, 30, 0)
+            result = tracker.get_report_data()
+
+        assert result.success is True
+        assert result.task_totals is not None
+        assert "coding" in result.task_totals
+        assert result.task_totals["coding"] == 3600.0  # 1 hour
+
+    def test_get_report_data_includes_open_span(self, temp_data_file):
+        storage = Storage(temp_data_file)
+        tracker = Tracker(storage)
+
+        with patch("time_surfer.tracker.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 1, 30, 9, 0, 0)
+            tracker.switch_to("coding")
+            # Don't switch away - span is still open
+            mock_dt.now.return_value = datetime(2026, 1, 30, 10, 0, 0)
+            result = tracker.get_report_data()
+
+        assert result.success is True
+        assert result.task_totals["coding"] == 3600.0  # 1 hour up to "now"
+
+    def test_get_report_data_fails_when_no_day(self, temp_data_file):
+        storage = Storage(temp_data_file)
+        tracker = Tracker(storage)
+
+        result = tracker.get_report_data()
+
+        assert result.success is False
+        assert "not started" in result.message.lower()
+
+    def test_get_report_data_with_stopped_day(self, temp_data_file):
+        storage = Storage(temp_data_file)
+        tracker = Tracker(storage)
+
+        with patch("time_surfer.tracker.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 1, 30, 9, 0, 0)
+            tracker.switch_to("coding")
+            mock_dt.now.return_value = datetime(2026, 1, 30, 10, 0, 0)
+            tracker.stop()
+            result = tracker.get_report_data()
+
+        assert result.success is True
+        assert result.task_totals["coding"] == 3600.0
 
 
 class TestTrackerSwitchTo:

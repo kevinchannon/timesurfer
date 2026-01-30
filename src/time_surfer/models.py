@@ -36,3 +36,4 @@ class TrackerResult:
     success: bool
     message: str
     day: Day | None = None
+    task_totals: dict[str, float] | None = None
