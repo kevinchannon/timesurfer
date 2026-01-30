@@ -41,5 +41,18 @@ def stop():
         raise typer.Exit(code=1)
 
 
+@app.command("switch-to")
+def switch_to(task: str = typer.Argument(..., help="Name of the task to switch to")):
+    """Switch to a new task (starts day if needed)."""
+    tracker = get_tracker()
+    result = tracker.switch_to(task)
+
+    if result.success:
+        console.print(f"[green]{result.message}[/green]")
+    else:
+        console.print(f"[red]Error: {result.message}[/red]")
+        raise typer.Exit(code=1)
+
+
 if __name__ == "__main__":
     app()

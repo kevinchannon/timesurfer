@@ -68,3 +68,39 @@ class TestStopCommand:
                 result = runner.invoke(app, ["stop"])
 
         assert "No tasks recorded" in result.output
+
+
+class TestSwitchToCommand:
+    def test_switch_to_succeeds(self, temp_data_file):
+        with patch("time_surfer.cli.Storage") as MockStorage:
+            MockStorage.return_value = Storage(temp_data_file)
+            with patch("time_surfer.tracker.datetime") as mock_dt:
+                mock_dt.now.return_value = datetime(2026, 1, 30, 9, 0, 0)
+                runner.invoke(app, ["start"])
+                mock_dt.now.return_value = datetime(2026, 1, 30, 9, 30, 0)
+                result = runner.invoke(app, ["switch-to", "coding"])
+
+        assert result.exit_code == 0
+        assert "Switched to 'coding'" in result.output
+
+    def test_switch_to_implicitly_starts(self, temp_data_file):
+        with patch("time_surfer.cli.Storage") as MockStorage:
+            MockStorage.return_value = Storage(temp_data_file)
+            with patch("time_surfer.tracker.datetime") as mock_dt:
+                mock_dt.now.return_value = datetime(2026, 1, 30, 9, 0, 0)
+                result = runner.invoke(app, ["switch-to", "coding"])
+
+        assert result.exit_code == 0
+        assert "Switched to 'coding'" in result.output
+
+    def test_switch_to_same_task_is_noop(self, temp_data_file):
+        with patch("time_surfer.cli.Storage") as MockStorage:
+            MockStorage.return_value = Storage(temp_data_file)
+            with patch("time_surfer.tracker.datetime") as mock_dt:
+                mock_dt.now.return_value = datetime(2026, 1, 30, 9, 0, 0)
+                runner.invoke(app, ["switch-to", "coding"])
+                mock_dt.now.return_value = datetime(2026, 1, 30, 10, 0, 0)
+                result = runner.invoke(app, ["switch-to", "coding"])
+
+        assert result.exit_code == 0
+        assert "Already working on 'coding'" in result.output
